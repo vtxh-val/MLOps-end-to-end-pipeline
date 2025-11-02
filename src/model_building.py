@@ -1,90 +1,115 @@
 import os
 import pickle
 import pandas as pd
+import mlflow
+import dagshub
+from dotenv import load_dotenv
 from xgboost import XGBRegressor, XGBClassifier
 
-def model_building(input_path="data/features/engineered.csv", output_dir="data/input", model_dir="models"):
+load_dotenv()  
+repo_onwer = os.getenv("REPO_ONWER") 
+repo_name = os.getenv("REPO_NAME")
+tracking_url = os.getenv("TRACKING_URL") 
+
+def model_building(
+    input_path="data/features/engineered.csv",
+    output_dir="data/input",
+    model_dir="models"
+):
     try:
-        # Ensure model directory exists
-        os.makedirs(model_dir, exist_ok=True)
-        os.makedirs(output_dir, exist_ok=True)
+        # --- MLflow setup ---
+        dagshub.init(repo_owner=repo_onwer, repo_name=repo_name, mlflow=True)
+        mlflow.set_tracking_uri(tracking_url)
+        mlflow.set_experiment("Stock_Trend_Prediction")
 
-        # Load data
-        print(f"==> Loading data from {input_path}...")
-        df = pd.read_csv(input_path, index_col=0, parse_dates=True)
-        print(f"Data shape: {df.shape}")
+        with mlflow.start_run(run_name="model_building"):
 
-        # Time-based split
-        train_size = int(0.7 * len(df))
-        train_df = df.iloc[:train_size]
-        test_df = df.iloc[train_size:]
+            # Ensure directories exist
+            os.makedirs(model_dir, exist_ok=True)
+            os.makedirs(output_dir, exist_ok=True)
 
-        # ---------------- Regression Model ----------------
-        X_train_reg = train_df.drop(columns=['Target_Return', 'Target_Trend'])
-        y_train_reg = train_df['Target_Return']
-        X_test_reg = test_df.drop(columns=['Target_Return', 'Target_Trend'])
-        y_test_reg = test_df['Target_Return']
+            # Load data
+            print(f"==> Loading data from {input_path}...")
+            df = pd.read_csv(input_path, index_col=0, parse_dates=True)
+            print(f"Data shape: {df.shape}")
 
+            # Time-based split
+            train_size = int(0.7 * len(df))
+            train_df = df.iloc[:train_size]
+            test_df = df.iloc[train_size:]
 
-        reg_model = XGBRegressor(
-            n_estimators=500, 
-            learning_rate=0.05, 
-            max_depth=5,
-            subsample=0.8, 
-            colsample_bytree=0.8, 
-            random_state=42
-        )
-        reg_model.fit(X_train_reg, y_train_reg)
+            # Regression Model
+            X_train_reg = train_df.drop(columns=['Target_Return', 'Target_Trend'])
+            y_train_reg = train_df['Target_Return']
+            X_test_reg = test_df.drop(columns=['Target_Return', 'Target_Trend'])
+            y_test_reg = test_df['Target_Return']
 
-        # Save regression model
-        reg_model_path = os.path.join(model_dir, "xgb_regressor.pkl")
-        with open(reg_model_path, "wb") as f:
-            pickle.dump(reg_model, f)
-        print(f"Regression model saved: {reg_model_path}")
+            reg_params = {
+                "n_estimators": 500,
+                "learning_rate": 0.05,
+                "max_depth": 5,
+                "subsample": 0.8,
+                "colsample_bytree": 0.8,
+                "random_state": 42
+            }
+            mlflow.log_params({f"reg_{k}": v for k, v in reg_params.items()})
 
-        # Save data
-        X_train_reg.to_csv(os.path.join(output_dir, "X_train_reg.csv"))
-        y_train_reg.to_csv(os.path.join(output_dir, "y_train_reg.csv"))
-        X_test_reg.to_csv(os.path.join(output_dir, "X_test_reg.csv"))
-        y_test_reg.to_csv(os.path.join(output_dir, "y_test_reg.csv"))
+            reg_model = XGBRegressor(**reg_params)
+            reg_model.fit(X_train_reg, y_train_reg)
 
-        # ---------------- Classification Model ----------------
-        X_train_clf = train_df.drop(columns=['Target_Return', 'Target_Trend'])
-        y_train_clf = train_df['Target_Trend']
-        X_test_clf = test_df.drop(columns=['Target_Return', 'Target_Trend'])
-        y_test_clf = test_df['Target_Trend']
+            # Save regression model
+            reg_model_path = os.path.join(model_dir, "xgb_regressor.pkl")
+            with open(reg_model_path, "wb") as f:
+                pickle.dump(reg_model, f)
+            print(f"Regression model saved: {reg_model_path}")
 
-        clf_model = XGBClassifier(
-            n_estimators=300, 
-            learning_rate=0.05, 
-            max_depth=5,
-            subsample=0.8, 
-            colsample_bytree=0.8, 
-            random_state=42
-        )
-        clf_model.fit(X_train_clf, y_train_clf)
+            # Save data
+            X_train_reg.to_csv(os.path.join(output_dir, "X_train_reg.csv"))
+            y_train_reg.to_csv(os.path.join(output_dir, "y_train_reg.csv"))
+            X_test_reg.to_csv(os.path.join(output_dir, "X_test_reg.csv"))
+            y_test_reg.to_csv(os.path.join(output_dir, "y_test_reg.csv"))
 
-        # Save classification model
-        clf_model_path = os.path.join(model_dir, "xgb_classifier.pkl")
-        with open(clf_model_path, "wb") as f:
-            pickle.dump(clf_model, f)
-        print(f"Classification model saved: {clf_model_path}")
+            # Classification Model
+            X_train_clf = train_df.drop(columns=['Target_Return', 'Target_Trend'])
+            y_train_clf = train_df['Target_Trend']
+            X_test_clf = test_df.drop(columns=['Target_Return', 'Target_Trend'])
+            y_test_clf = test_df['Target_Trend']
 
-        # Save data
-        X_train_clf.to_csv(os.path.join(output_dir, "X_train_clf.csv"))
-        y_train_clf.to_csv(os.path.join(output_dir, "y_train_clf.csv"))
-        X_test_clf.to_csv(os.path.join(output_dir, "X_test_clf.csv"))
-        y_test_clf.to_csv(os.path.join(output_dir, "y_test_clf.csv"))
+            clf_params = {
+                "n_estimators": 300,
+                "learning_rate": 0.05,
+                "max_depth": 5,
+                "subsample": 0.8,
+                "colsample_bytree": 0.8,
+                "random_state": 42
+            }
+            mlflow.log_params({f"clf_{k}": v for k, v in clf_params.items()})
 
-        print("\nAll models and datasets successfully saved!")
-        print(f"Data directory: {output_dir}")
-        print(f"Models directory: {model_dir}")
+            clf_model = XGBClassifier(**clf_params)
+            clf_model.fit(X_train_clf, y_train_clf)
 
-        return reg_model_path, clf_model_path
+            # Save classification model
+            clf_model_path = os.path.join(model_dir, "xgb_classifier.pkl")
+            with open(clf_model_path, "wb") as f:
+                pickle.dump(clf_model, f)
+            print(f"Classification model saved: {clf_model_path}")
+
+            # Save data
+            X_train_clf.to_csv(os.path.join(output_dir, "X_train_clf.csv"))
+            y_train_clf.to_csv(os.path.join(output_dir, "y_train_clf.csv"))
+            X_test_clf.to_csv(os.path.join(output_dir, "X_test_clf.csv"))
+            y_test_clf.to_csv(os.path.join(output_dir, "y_test_clf.csv"))
+
+            print("\nAll models and datasets successfully saved!")
+            print(f"Data directory: {output_dir}")
+            print(f"Models directory: {model_dir}")
+
+            return reg_model_path, clf_model_path
 
     except Exception as e:
         print(f"Error in model_building: {e}")
         raise e
+
 
 if __name__ == "__main__":
     model_building()

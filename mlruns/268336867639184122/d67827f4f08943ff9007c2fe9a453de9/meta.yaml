@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/valerieteo/Documents/MLOps/MLOps-end-to-end-pipeline/mlruns/268336867639184122/d67827f4f08943ff9007c2fe9a453de9/artifacts
+end_time: 1762105430033
+entry_point_name: ''
+experiment_id: '268336867639184122'
+lifecycle_stage: active
+run_id: d67827f4f08943ff9007c2fe9a453de9
+run_name: xgboost_reg_clf_evaluation
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762105429992
+status: 3
+tags: []
+user_id: valerieteo

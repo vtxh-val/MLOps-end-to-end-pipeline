@@ -1,2 +1,4 @@
 yfinance
 mplfinance
+mlflow==2.2.2
+dagshub
